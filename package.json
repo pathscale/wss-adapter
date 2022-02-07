@@ -11,5 +11,13 @@
   "license": "MIT",
   "devDependencies": {
     "typescript": "^4.5.5"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skaptox/wss-adapter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/skaptox/wss-adapter/issues"
+  },
+  "homepage": "https://github.com/skaptox/wss-adapter#readme"
 }
