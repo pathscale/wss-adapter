@@ -1,0 +1,15 @@
+{
+  "name": "@pathscale/wss-adapter",
+  "version": "1.0.0",
+  "description": "Websocket adapter for the Pathscale WSS",
+  "main": "dist/wssAdapter.js",
+  "types": "dist/wssAdapter.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "PathScale",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^4.5.5"
+  }
+}
