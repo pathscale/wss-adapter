@@ -1,6 +1,6 @@
 {
   "name": "@pathscale/wss-adapter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Websocket adapter for the Pathscale WSS",
   "main": "dist/wssAdapter.js",
   "types": "dist/wssAdapter.d.ts",
@@ -14,10 +14,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/skaptox/wss-adapter.git"
+    "url": "git+https://github.com/pathscale/wss-adapter.git"
   },
   "bugs": {
-    "url": "https://github.com/skaptox/wss-adapter/issues"
+    "url": "https://github.com/pathscale/wss-adapter/issues"
   },
-  "homepage": "https://github.com/skaptox/wss-adapter#readme"
+  "homepage": "https://github.com/pathscale/wss-adapter#readme"
 }
