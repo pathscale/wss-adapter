@@ -31,7 +31,7 @@ const store: IStore = {
   onError() {},
 }
 
-wssAdapter.configure = configuration => {
+wssAdapter.configure = (configuration) => {
   const { timeout, services, errors, onError } = configuration
 
   // save some stuff for later retrieval
@@ -54,9 +54,10 @@ wssAdapter.configure = configuration => {
     wssAdapter.sessions[serviceName] = new Proxy(
       {},
       {
-        get: (target, methodName: string) => (payload: Record<string, unknown>) =>
-          sendHandler(serviceName, serviceConfig, methodName, payload),
-      },
+        get:
+          (target, methodName: string) => (payload: Record<string, unknown>) =>
+            sendHandler(serviceName, serviceConfig, methodName, payload),
+      }
     )
   }
 }
@@ -64,7 +65,7 @@ wssAdapter.configure = configuration => {
 const connectHandler = <T>(
   serviceName: string,
   serviceConfig: IServiceConfig,
-  payload: string | string[] | undefined,
+  payload: string | string[] | undefined
 ) => {
   return new Promise((resolve, reject) => {
     store.sessions[serviceName] = new WebSocket(serviceConfig.remote, payload)
@@ -74,7 +75,11 @@ const connectHandler = <T>(
       console.log(response)
 
       if (response.params.error) {
-        reject(new Error(store.errors[response.params.error] ?? 'Something went wrong'))
+        reject(
+          new Error(
+            store.errors[response.params.error] ?? response.params.error
+          )
+        )
         return
       }
 
@@ -82,7 +87,15 @@ const connectHandler = <T>(
       resolve(response.params)
     }
 
-    store.sessions[serviceName].onclose = serviceConfig.onDisconnect
+    store.sessions[serviceName].onclose = (event) => {
+      serviceConfig.onDisconnect?.(event)
+
+      reject(
+        new Error(
+          `code: ${event.code}, reason: ${event.reason}, wasClean: ${event.wasClean}`
+        )
+      )
+    }
   }) as Promise<T>
 }
 
@@ -94,35 +107,41 @@ const sendHandler = (
   serviceName: string,
   serviceConfig: IServiceConfig,
   methodName: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ) => {
   const methodCode = Object.entries(serviceConfig.methods)
     .map(([code, info]) => ({ code, info }))
     .find(({ info }) => info.name === methodName)?.code
 
   if (!methodCode) {
-    throw new Error(`method ${methodName} not available in ${serviceName} service`)
+    throw new Error(
+      `method ${methodName} not available in ${serviceName} service`
+    )
   }
 
   if (
-    !Object.keys(params).every(param =>
-      serviceConfig.methods[methodCode].parameters.includes(param),
+    !Object.keys(params).every((param) =>
+      serviceConfig.methods[methodCode].parameters.includes(param)
     )
   ) {
-    throw new Error(`method ${methodCode} is being called with missing parameters`)
+    throw new Error(
+      `method ${methodCode} is being called with missing parameters`
+    )
   }
 
   const purgedParams: Record<string, unknown> = {}
-  serviceConfig.methods[methodCode].parameters.forEach(k => {
+  serviceConfig.methods[methodCode].parameters.forEach((k) => {
     purgedParams[k] = params[k]
   })
 
   const difference = Object.keys(params).filter(
-    x => !serviceConfig.methods[methodCode].parameters.includes(x),
+    (x) => !serviceConfig.methods[methodCode].parameters.includes(x)
   )
 
   if (difference.length) {
-    throw new Error(`method ${methodCode} is being called with unknow parameters, ${difference}`)
+    throw new Error(
+      `method ${methodCode} is being called with unknow parameters, ${difference}`
+    )
   }
 
   const payload = {

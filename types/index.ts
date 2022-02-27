@@ -9,7 +9,11 @@ interface IService {
 }
 
 interface IServiceConfig extends IService {
-  onDisconnect: () => void | null
+  onDisconnect: (event: {
+    code: number
+    reason: string
+    wasClean: boolean
+  }) => void | null
 }
 
 interface IServices {
@@ -70,4 +74,12 @@ interface IStore {
   onError: (error: { error: number; message: string }) => void
 }
 
-export { IStore, IWssAdapter, IServiceConfig, IConfiguration, IErrors, IServices, IService }
+export {
+  IStore,
+  IWssAdapter,
+  IServiceConfig,
+  IConfiguration,
+  IErrors,
+  IServices,
+  IService,
+}
