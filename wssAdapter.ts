@@ -44,8 +44,8 @@ wssAdapter.configure = (configuration) => {
     // construct services objects with two simple functions
     // intended use: `wssAdapter.services.admin.connect([1, 2, 3])` or `wssAdapter.services.auth.connect([1, 2, 3])`
     wssAdapter.services[serviceName] = {
-      connect: <T>(payload: string | string[] | undefined) =>
-        connectHandler<T>(serviceName, serviceConfig, payload),
+      connect: <T>(payload: string | string[] | undefined, remote?: string) =>
+        connectHandler<T>(serviceName, serviceConfig, payload, remote),
       disconnect: () => disconnectHandler(serviceName),
     }
 
@@ -65,10 +65,14 @@ wssAdapter.configure = (configuration) => {
 const connectHandler = <T>(
   serviceName: string,
   serviceConfig: IServiceConfig,
-  payload: string | string[] | undefined
+  payload: string | string[] | undefined,
+  remote?: string
 ) => {
   return new Promise((resolve, reject) => {
-    store.sessions[serviceName] = new WebSocket(serviceConfig.remote, payload)
+    store.sessions[serviceName] = new WebSocket(
+      remote || serviceConfig.remote,
+      payload
+    )
 
     store.sessions[serviceName].onmessage = function (event: { data: string }) {
       const response = JSON.parse(event.data)

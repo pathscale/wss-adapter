@@ -32,7 +32,10 @@ interface IConfiguration {
 }
 
 interface IServiceConnect {
-  connect<T>(payload: string | string[] | undefined): Promise<T>
+  connect<T>(
+    payload: string | string[] | undefined,
+    remote?: string
+  ): Promise<T>
   disconnect: () => void
 }
 
