@@ -123,29 +123,32 @@ const sendHandler = (
     )
   }
 
-  if (
-    !Object.keys(params).every((param) =>
-      serviceConfig.methods[methodCode].parameters.includes(param)
-    )
-  ) {
-    throw new Error(
-      `method ${methodCode} is being called with missing parameters`
-    )
-  }
-
   const purgedParams: Record<string, unknown> = {}
-  serviceConfig.methods[methodCode].parameters.forEach((k) => {
-    purgedParams[k] = params[k]
-  })
 
-  const difference = Object.keys(params).filter(
-    (x) => !serviceConfig.methods[methodCode].parameters.includes(x)
-  )
+  if (params) {
+    if (
+      !Object.keys(params).every((param) =>
+        serviceConfig.methods[methodCode].parameters.includes(param)
+      )
+    ) {
+      throw new Error(
+        `method ${methodCode} is being called with missing parameters`
+      )
+    }
 
-  if (difference.length) {
-    throw new Error(
-      `method ${methodCode} is being called with unknow parameters, ${difference}`
+    serviceConfig.methods[methodCode].parameters.forEach((k) => {
+      purgedParams[k] = params[k]
+    })
+
+    const difference = Object.keys(params).filter(
+      (x) => !serviceConfig.methods[methodCode].parameters.includes(x)
     )
+
+    if (difference.length) {
+      throw new Error(
+        `method ${methodCode} is being called with unknow parameters, ${difference}`
+      )
+    }
   }
 
   const payload = {

@@ -7,7 +7,6 @@ interface IService {
     }
   }
 }
-
 interface IServiceConfig extends IService {
   onDisconnect: (event: {
     code: number
@@ -15,22 +14,18 @@ interface IServiceConfig extends IService {
     wasClean: boolean
   }) => void | null
 }
-
 interface IServices {
   [serviceName: string]: IServiceConfig
 }
-
 interface IErrors {
   [errorCode: number]: string
 }
-
 interface IConfiguration {
   timeout: number
   services: IServices
   errors: IErrors
   onError: (error: { error: number; message: string }) => void
 }
-
 interface IServiceConnect {
   connect<T>(
     payload: string | string[] | undefined,
@@ -38,27 +33,23 @@ interface IServiceConnect {
   ): Promise<T>
   disconnect: () => void
 }
-
 interface IWssAdapter {
   services: {
     [serviceName: string]: IServiceConnect
   }
   sessions: {
-    [serviceName: string]: unknown
+    [serviceName: string]: any
   }
   configure: (configuration: IConfiguration) => void
 }
-
 interface ISequence {
   value: number
   getSeq: () => number
   decreaseSeq: () => void
 }
-
 interface ISessions {
   [serviceName: string]: WebSocket
 }
-
 interface IPendingPromises {
   [seq: number]: {
     resolve: (payload: unknown) => void
@@ -66,7 +57,6 @@ interface IPendingPromises {
     toHandler: ReturnType<typeof setTimeout>
   }
 }
-
 interface IStore {
   timeout: number
   errors: IErrors
@@ -76,7 +66,6 @@ interface IStore {
   pendingPromises: IPendingPromises
   onError: (error: { error: number; message: string }) => void
 }
-
 export {
   IStore,
   IWssAdapter,
