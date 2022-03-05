@@ -210,7 +210,7 @@ interface IResponse {
 
 function onError(response: IResponse) {
   const { error: errorCode } = response.params
-  const errorMsg = store.errors[errorCode] ?? 'Something went wrong'
+  const errorMsg = store.errors[errorCode] ?? errorCode
 
   if ([45349638, 45349637].includes(errorCode)) {
     store.sequence.decreaseSeq()
