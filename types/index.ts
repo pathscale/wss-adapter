@@ -38,7 +38,10 @@ interface IWssAdapter {
     [serviceName: string]: IServiceConnect
   }
   sessions: {
-    [serviceName: string]: any
+    [serviceName: string]: Record<
+      string,
+      <Response, Params = {}>(payload?: Params) => Promise<Response>
+    >
   }
   configure: (configuration: IConfiguration) => void
 }
