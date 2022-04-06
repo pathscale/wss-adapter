@@ -111,7 +111,7 @@ const sendHandler = (
   serviceName: string,
   serviceConfig: IServiceConfig,
   methodName: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown> = {}
 ) => {
   const methodCode = Object.entries(serviceConfig.methods)
     .map(([code, info]) => ({ code, info }))
