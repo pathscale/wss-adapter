@@ -123,38 +123,38 @@ const sendHandler = (
     )
   }
 
-  const purgedParams: Record<string, unknown> = {}
+  // const purgedParams: Record<string, unknown> = {}
 
-  if (params) {
-    if (
-      !Object.keys(params).every((param) =>
-        serviceConfig.methods[methodCode].parameters.includes(param)
-      )
-    ) {
-      throw new Error(
-        `method ${methodCode} is being called with missing parameters`
-      )
-    }
+  // if (params) {
+  //   if (
+  //     !Object.keys(params).every((param) =>
+  //       serviceConfig.methods[methodCode].parameters.includes(param)
+  //     )
+  //   ) {
+  //     throw new Error(
+  //       `method ${methodCode} is being called with missing parameters`
+  //     )
+  //   }
 
-    serviceConfig.methods[methodCode].parameters.forEach((k) => {
-      purgedParams[k] = params[k]
-    })
+  //   serviceConfig.methods[methodCode].parameters.forEach((k) => {
+  //     purgedParams[k] = params[k]
+  //   })
 
-    const difference = Object.keys(params).filter(
-      (x) => !serviceConfig.methods[methodCode].parameters.includes(x)
-    )
+  //   const difference = Object.keys(params).filter(
+  //     (x) => !serviceConfig.methods[methodCode].parameters.includes(x)
+  //   )
 
-    if (difference.length) {
-      throw new Error(
-        `method ${methodCode} is being called with unknow parameters, ${difference}`
-      )
-    }
-  }
+  //   if (difference.length) {
+  //     throw new Error(
+  //       `method ${methodCode} is being called with unknow parameters, ${difference}`
+  //     )
+  //   }
+  // }
 
   const payload = {
     method: Number.parseInt(methodCode),
     seq: store.sequence.getSeq(),
-    params: purgedParams,
+    params: params,
   }
 
   console.log(`${serviceName}::${methodName} sends:`, payload)
