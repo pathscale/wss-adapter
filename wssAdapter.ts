@@ -14,6 +14,7 @@ const store: IStore = {
   timeout: 0,
   errors: {},
   services: {},
+  subscriptions: {},
 
   sequence: {
     value: 1,
@@ -47,6 +48,10 @@ wssAdapter.configure = (configuration) => {
       connect: <T>(payload: string | string[] | undefined, remote?: string) =>
         connectHandler<T>(serviceName, serviceConfig, payload, remote),
       disconnect: () => disconnectHandler(serviceName),
+    }
+
+    if (serviceConfig.subscriptions) {
+      store.subscriptions[serviceName] = serviceConfig.subscriptions
     }
 
     // construct sessions objects that contain a proxy so you can ask unknown property
@@ -123,34 +128,6 @@ const sendHandler = (
     )
   }
 
-  // const purgedParams: Record<string, unknown> = {}
-
-  // if (params) {
-  //   if (
-  //     !Object.keys(params).every((param) =>
-  //       serviceConfig.methods[methodCode].parameters.includes(param)
-  //     )
-  //   ) {
-  //     throw new Error(
-  //       `method ${methodCode} is being called with missing parameters`
-  //     )
-  //   }
-
-  //   serviceConfig.methods[methodCode].parameters.forEach((k) => {
-  //     purgedParams[k] = params[k]
-  //   })
-
-  //   const difference = Object.keys(params).filter(
-  //     (x) => !serviceConfig.methods[methodCode].parameters.includes(x)
-  //   )
-
-  //   if (difference.length) {
-  //     throw new Error(
-  //       `method ${methodCode} is being called with unknow parameters, ${difference}`
-  //     )
-  //   }
-  // }
-
   const payload = {
     method: Number.parseInt(methodCode),
     seq: store.sequence.getSeq(),
@@ -175,25 +152,36 @@ const sendHandler = (
 
 const receiveHandler = (event: { data: string }) => {
   const response = JSON.parse(event.data)
-  console.log(`app::${response.method} got:`, response)
 
-  const error = response.method === 0
-  const done = response.method.toString().endsWith('1')
+  if (response.method || response.method === 0) {
+    console.log(`app::${response.method} got:`, response)
 
-  const resolve = (payload: unknown, code: number) => {
-    console.log(code)
-    const executor = store.pendingPromises[response.seq]
-    clearTimeout(store.pendingPromises[response.seq].toHandler)
-    delete store.pendingPromises[response.seq]
-    executor.resolve(payload)
-  }
+    const error = response.method === 0
+    const done = response.method.toString().endsWith('1')
 
-  // handle error
-  if (error) {
-    onError(response)
-  } else if (done) {
-    const code = response.method - 1
-    resolve(response, code)
+    const resolve = (payload: unknown, code: number) => {
+      console.log(code)
+      const executor = store.pendingPromises[response.seq]
+      clearTimeout(store.pendingPromises[response.seq].toHandler)
+      delete store.pendingPromises[response.seq]
+      executor.resolve(payload)
+    }
+
+    // handle error
+    if (error) {
+      onError(response)
+    } else if (done) {
+      const code = response.method - 1
+      resolve(response, code)
+    }
+  } else if (response.resource) {
+    console.log(`app::${response.resource} got:`, response)
+    const resource = response.resource.split('@')[0]
+    //@ts-ignore
+    const executor = store.subscriptions.app[resource] as (
+      payload: unknown
+    ) => void
+    executor?.(response)
   }
 }
 

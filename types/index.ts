@@ -7,7 +7,11 @@ interface IService {
     }
   }
 }
+
+type ISubscriptions = Record<string, unknown>
+
 interface IServiceConfig extends IService {
+  subscriptions: ISubscriptions
   onDisconnect: (event: {
     code: number
     reason: string
@@ -66,6 +70,7 @@ interface IStore {
   services: IServices
   sequence: ISequence
   sessions: ISessions
+  subscriptions: ISubscriptions
   pendingPromises: IPendingPromises
   onError: (error: { error: number; message: string }) => void
 }
