@@ -11,7 +11,7 @@ interface IService {
 type ISubscriptions = Record<string, unknown>
 
 interface IServiceConfig extends IService {
-  subscriptions: ISubscriptions
+  subscriptions?: ISubscriptions
   onDisconnect: (event: {
     code: number
     reason: string
@@ -28,7 +28,6 @@ interface IConfiguration {
   timeout: number
   services: IServices
   errors: IErrors
-  onError: (error: { error: number; message: string }) => void
 }
 interface IServiceConnect {
   connect<T>(
@@ -62,6 +61,7 @@ interface IPendingPromises {
     resolve: (payload: unknown) => void
     reject: (error: Error) => void
     toHandler: ReturnType<typeof setTimeout>
+    methodName: string
   }
 }
 interface IStore {
@@ -72,7 +72,6 @@ interface IStore {
   sessions: ISessions
   subscriptions: ISubscriptions
   pendingPromises: IPendingPromises
-  onError: (error: { error: number; message: string }) => void
 }
 export {
   IStore,

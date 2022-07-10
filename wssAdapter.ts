@@ -29,17 +29,15 @@ const store: IStore = {
 
   sessions: {},
   pendingPromises: {},
-  onError() {},
 }
 
 wssAdapter.configure = (configuration) => {
-  const { timeout, services, errors, onError } = configuration
+  const { timeout, services, errors } = configuration
 
   // save some stuff for later retrieval
   store.timeout = timeout
   store.errors = errors
   store.services = services
-  store.onError = onError
 
   for (const [serviceName, serviceConfig] of Object.entries(services)) {
     // construct services objects with two simple functions
@@ -144,8 +142,9 @@ const sendHandler = (
       resolve,
       reject,
       toHandler: setTimeout(() => {
-        reject(new Error(methodCode.toString() + ' took to long, aborting'))
+        reject(new Error(methodName + ' took to long, aborting'))
       }, store.timeout),
+      methodName,
     }
   })
 }
@@ -154,13 +153,17 @@ const receiveHandler = (event: { data: string }) => {
   const response = JSON.parse(event.data)
 
   if (response.method || response.method === 0) {
-    console.log(`app::${response.method} got:`, response)
+    console.log(
+      `app::${
+        store.pendingPromises[response.seq]?.methodName || response.method
+      } got:`,
+      response
+    )
 
     const error = response.method === 0
     const done = response.method.toString().endsWith('1')
 
     const resolve = (payload: unknown, code: number) => {
-      console.log(code)
       const executor = store.pendingPromises[response.seq]
       clearTimeout(store.pendingPromises[response.seq].toHandler)
       delete store.pendingPromises[response.seq]
@@ -204,11 +207,6 @@ function onError(response: IResponse) {
     store.sequence.decreaseSeq()
     console.log('seq has been decreased because of error')
   }
-
-  store.onError?.({
-    error: errorCode,
-    message: errorMsg,
-  })
 
   // if there was only one executor saved in store.pendingPromises, then it was that request that failed
   if (Object.keys(store.pendingPromises).length === 1) {
