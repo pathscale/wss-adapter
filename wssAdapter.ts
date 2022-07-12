@@ -178,7 +178,6 @@ const receiveHandler = (event: { data: string }) => {
       resolve(response, code)
     }
   } else if (response.resource) {
-    console.log(`app::${response.resource} got:`, response)
     const resource = response.resource.split('@')[0]
     //@ts-ignore
     const executor = store.subscriptions.app[resource] as (
