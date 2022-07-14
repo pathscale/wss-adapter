@@ -196,6 +196,7 @@ interface IResponse {
   params: {
     error: number
   }
+  seq: number
 }
 
 function onError(response: IResponse) {
@@ -204,7 +205,6 @@ function onError(response: IResponse) {
 
   if ([45349638, 45349637].includes(errorCode)) {
     store.sequence.decreaseSeq()
-    console.log('seq has been decreased because of error')
   }
 
   // if there was only one executor saved in store.pendingPromises, then it was that request that failed
@@ -212,9 +212,21 @@ function onError(response: IResponse) {
     const onlyKey = Number.parseInt(Object.keys(store.pendingPromises)[0])
     clearTimeout(store.pendingPromises[onlyKey].toHandler)
     store.pendingPromises[onlyKey].reject(new Error(errorMsg))
+    console.error(store.pendingPromises[onlyKey].methodName + ' failed')
     delete store.pendingPromises[onlyKey]
-  }
+  } else if (response.seq > 1 && store.pendingPromises[response.seq]) {
+    const executor = store.pendingPromises[response.seq]
 
+    clearTimeout(executor.toHandler)
+    executor.reject(
+      new Error(
+        `${executor.methodName ?? ''}: ${
+          errorCode || JSON.stringify(response.params)
+        }`
+      )
+    )
+    delete store.pendingPromises[response.seq]
+  }
   // if there were more than one, there is no way of knowing who failed
   else {
     throw new Error('Unkown request failed')
