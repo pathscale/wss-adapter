@@ -160,7 +160,7 @@ const receiveHandler = (event: { data: string }) => {
       response
     )
 
-    const error = response.method === 0
+    const error = response.method === 0 || response.params.error
     const done = response.method.toString().endsWith('1')
 
     const resolve = (payload: unknown, code: number) => {
