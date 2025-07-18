@@ -8,4 +8,6 @@ export type {
   IMethodInfo,
   IErrors,
   IStore,
+  ApiMethods,
+  ServiceName,
 } from './types.js';
