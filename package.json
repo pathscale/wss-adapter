@@ -1,17 +1,49 @@
 {
   "name": "@pathscale/wss-adapter",
-  "version": "1.0.13",
-  "description": "Websocket adapter for the Pathscale WSS",
-  "main": "dist/wssAdapter.js",
-  "types": "dist/wssAdapter.d.ts",
-  "scripts": {
-    "build": "tsc"
+  "version": "2.0.0",
+  "description": "Modern WebSocket adapter for PathScale WSS services",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
   },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && tsc-alias",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "test": "echo 'Tests coming soon'",
+    "lint": "biome check .",
+    "format": "biome format . --write",
+    "commit": "cz",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,js,json}": [
+      "biome check --apply"
+    ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
+  },
+  "keywords": [
+    "websocket",
+    "pathscale",
+    "wss",
+    "adapter",
+    "client"
+  ],
   "author": "PathScale",
   "license": "MIT",
-  "devDependencies": {
-    "typescript": "^4.5.5"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pathscale/wss-adapter.git"
@@ -19,5 +51,20 @@
   "bugs": {
     "url": "https://github.com/pathscale/wss-adapter/issues"
   },
-  "homepage": "https://github.com/pathscale/wss-adapter#readme"
+  "homepage": "https://github.com/pathscale/wss-adapter#readme",
+  "devDependencies": {
+    "@commitlint/cli": "^19.0.3",
+    "@commitlint/config-conventional": "^19.0.3",
+    "@commitlint/cz-commitlint": "^19.8.1",
+    "@types/node": "^22.15.17",
+    "biome": "^0.3.3",
+    "commitizen": "^4.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.0.0",
+    "tsc-alias": "^1.8.10",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
