@@ -248,14 +248,17 @@ function onError(response: IResponse) {
     typeof response.params === "object" && response.params !== null
       ? response.params
       : {};
+
   const errorMsg =
     params.reason ||
     params.error ||
     response.params ||
-    error?.message ||
-    response.code;
+    error?.message
+
+  const errorCode = response.code ?? "Error";
 
   let methodName = "";
+
   if (response.method) {
     for (const serviceConfig of Object.values(store.services)) {
       const methodKey = response.method.toString();
@@ -268,7 +271,7 @@ function onError(response: IResponse) {
   }
 
   const fullErrorMsg = methodName
-    ? `${methodName}: ${errorMsg}`
+    ? `[${errorCode}]: ${methodName}: ${errorMsg}`
     : String(errorMsg);
 
   if (store.onError) {
@@ -278,7 +281,7 @@ function onError(response: IResponse) {
   const executor = store.pendingPromises[response.seq];
   if (executor) {
     clearTimeout(executor.toHandler);
-    executor.reject(new Error(`${executor.methodName || ""}: ${errorMsg}`));
+    executor.reject(new Error(`${executor.methodName || ""}: ${errorMsg}`, { cause: errorCode }));
     delete store.pendingPromises[response.seq];
   } else {
     throw new Error("Unknown request failed");
