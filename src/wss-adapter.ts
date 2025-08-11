@@ -107,14 +107,18 @@ const connectHandler = <T>(
       if (response.type === "Error" || response.code) {
         const error = store.errors.codes.find((c) => c.code === response.code);
         const errorMsg = response.params || error?.message || response.code;
+        const errorCode = typeof response.code === "number" ? response.code : 0;
 
         if (store.onError) {
+          store.onError(String(errorMsg)); // Legacy format
           store.onError({
-            cause: { code: response.code || 0, message: String(errorMsg) },
-          });
+            cause: { code: errorCode, message: String(errorMsg) },
+          }); // New format
         }
 
-        reject(new Error(String(errorMsg)));
+        const err: any = new Error(String(errorMsg), { cause: errorCode });
+        if (err.cause === undefined) err.cause = errorCode; // Fallback for older targets
+        reject(err);
         return;
       }
 
@@ -254,7 +258,7 @@ function onError(response: IResponse) {
   const errorMsg =
     params.reason || params.error || response.params || error?.message;
 
-  const errorCode = response.code ?? "Error";
+  const errorCode = typeof response.code === "number" ? response.code : 0;
 
   let methodName = "";
 
@@ -273,20 +277,20 @@ function onError(response: IResponse) {
     ? `[${errorCode}]: ${methodName}: ${errorMsg}`
     : String(errorMsg);
 
+  // Emit both formats for backward compatibility
   if (store.onError) {
-    store.onError({
-      cause: { code: response.code || 0, message: fullErrorMsg },
-    });
+    store.onError(fullErrorMsg); // Legacy format
+    store.onError({ cause: { code: errorCode, message: fullErrorMsg } }); // New format
   }
 
   const executor = store.pendingPromises[response.seq];
   if (executor) {
     clearTimeout(executor.toHandler);
-    executor.reject(
-      new Error(`${executor.methodName || ""}: ${errorMsg}`, {
-        cause: errorCode,
-      })
-    );
+    const err: any = new Error(`${executor.methodName || ""}: ${errorMsg}`, {
+      cause: errorCode,
+    });
+    if (err.cause === undefined) err.cause = errorCode; // Fallback for older targets
+    executor.reject(err);
     delete store.pendingPromises[response.seq];
   } else {
     throw new Error("Unknown request failed");

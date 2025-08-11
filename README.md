@@ -33,8 +33,14 @@ wssAdapter.configure({
       { code: 40002, message: "Session expired" },
     ],
   },
-  onError: (error) =>
-    console.error("Error:", error.cause.message, "Code:", error.cause.code),
+  onError: (error) => {
+    // Backward compatible - supports both string and object formats
+    if (typeof error === "string") {
+      console.error("Error:", error);
+    } else {
+      console.error("Error:", error.cause.message, "Code:", error.cause.code);
+    }
+  },
 });
 
 // Connect
@@ -58,7 +64,10 @@ interface IConfiguration {
   timeout: number;
   services: Record<string, IServiceConfig>;
   errors: IErrors;
-  onError?: (error: { cause: { code: number; message: string } }) => void;
+  // Backward compatible: supports both string (legacy) and object (new) formats
+  onError?: (
+    error: string | { cause: { code: number; message: string } }
+  ) => void;
 }
 
 interface IServiceConfig {
