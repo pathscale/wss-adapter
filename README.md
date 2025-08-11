@@ -11,37 +11,41 @@ npm install @pathscale/wss-adapter
 ## Usage
 
 ```typescript
-import wssAdapter from '@pathscale/wss-adapter';
+import wssAdapter from "@pathscale/wss-adapter";
 
 // Configure
 wssAdapter.configure({
   timeout: 30000,
   services: {
     app: {
-      remote: 'wss://api.example.com',
+      remote: "wss://api.example.com",
       methods: {
-        '10001': { name: 'login', parameters: ['username', 'password'] },
-        '10002': { name: 'getUserProfile', parameters: ['userId'] },
+        "10001": { name: "login", parameters: ["username", "password"] },
+        "10002": { name: "getUserProfile", parameters: ["userId"] },
       },
-      onDisconnect: (event) => console.log('Disconnected:', event),
+      onDisconnect: (event) => console.log("Disconnected:", event),
     },
   },
   errors: {
-    language: 'en',
+    language: "en",
     codes: [
-      { code: 40001, message: 'Invalid credentials' },
-      { code: 40002, message: 'Session expired' },
+      { code: 40001, message: "Invalid credentials" },
+      { code: 40002, message: "Session expired" },
     ],
   },
-  onError: (message) => console.error('Error:', message),
+  onError: (error) =>
+    console.error("Error:", error.cause.message, "Code:", error.cause.code),
 });
 
 // Connect
-const result = await wssAdapter.services.app.connect(['token1', 'token2']);
+const result = await wssAdapter.services.app.connect(["token1", "token2"]);
 
 // Call methods
-const profile = await wssAdapter.sessions.app.getUserProfile({ userId: '123' });
-const login = await wssAdapter.sessions.app.login({ username: 'user', password: 'pass' });
+const profile = await wssAdapter.sessions.app.getUserProfile({ userId: "123" });
+const login = await wssAdapter.sessions.app.login({
+  username: "user",
+  password: "pass",
+});
 
 // Disconnect
 wssAdapter.services.app.disconnect();
@@ -54,7 +58,7 @@ interface IConfiguration {
   timeout: number;
   services: Record<string, IServiceConfig>;
   errors: IErrors;
-  onError?: (message: string) => void;
+  onError?: (error: { cause: { code: number; message: string } }) => void;
 }
 
 interface IServiceConfig {
