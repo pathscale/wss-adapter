@@ -110,10 +110,10 @@ const connectHandler = <T>(
         const errorCode = typeof response.code === "number" ? response.code : 0;
 
         if (store.onError) {
-          store.onError(String(errorMsg)); // Legacy format
+          // Emit structured error for backward compatibility
           store.onError({
             cause: { code: errorCode, message: String(errorMsg) },
-          }); // New format
+          });
         }
 
         const err: any = new Error(String(errorMsg), { cause: errorCode });
@@ -277,10 +277,8 @@ function onError(response: IResponse) {
     ? `[${errorCode}]: ${methodName}: ${errorMsg}`
     : String(errorMsg);
 
-  // Emit both formats for backward compatibility
   if (store.onError) {
-    store.onError(fullErrorMsg); // Legacy format
-    store.onError({ cause: { code: errorCode, message: fullErrorMsg } }); // New format
+    store.onError({ cause: { code: errorCode, message: fullErrorMsg } });
   }
 
   const executor = store.pendingPromises[response.seq];
