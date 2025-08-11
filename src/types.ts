@@ -1,4 +1,3 @@
-
 export interface IMethodInfo {
   name: string;
   parameters: string[];
@@ -25,7 +24,9 @@ export interface IConfiguration {
   timeout: number;
   services: Record<string, IServiceConfig>;
   errors: IErrors;
-  onError?: (message: string) => void;
+  onError?: (
+    error: string | { cause: { code: number; message: string } }
+  ) => void;
 }
 
 export interface IStore {
@@ -48,7 +49,9 @@ export interface IStore {
       methodName: string;
     }
   >;
-  onError?: (message: string) => void;
+  onError?: (
+    error: string | { cause: { code: number; message: string } }
+  ) => void;
 }
 
 export interface IServiceAdapter {

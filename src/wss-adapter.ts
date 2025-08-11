@@ -5,7 +5,7 @@ import type {
   IStore,
   IWssAdapter,
   ServiceName,
-} from './types.js';
+} from "./types.js";
 const wssAdapter: IWssAdapter = {
   services: {} as Record<ServiceName, IServiceAdapter>,
   sessions: {} as ApiMethods,
@@ -63,7 +63,7 @@ wssAdapter.configure = (configuration) => {
         get:
           (_target, methodName: string) => (payload: Record<string, unknown>) =>
             sendHandler(serviceName, serviceConfig, methodName, payload),
-      },
+      }
     );
   }
 };
@@ -72,7 +72,7 @@ const connectHandler = <T>(
   serviceName: string,
   serviceConfig: IServiceConfig,
   payload: string | string[] | undefined,
-  remote?: string,
+  remote?: string
 ) => {
   return new Promise((resolve, reject) => {
     if (!payload || !Array.isArray(payload)) {
@@ -84,7 +84,7 @@ const connectHandler = <T>(
 
     const wsConnection = new WebSocket(
       remote || serviceConfig.remote,
-      protocols,
+      protocols
     );
     store.sessions[serviceName] = wsConnection;
 
@@ -107,12 +107,18 @@ const connectHandler = <T>(
       if (response.type === "Error" || response.code) {
         const error = store.errors.codes.find((c) => c.code === response.code);
         const errorMsg = response.params || error?.message || response.code;
+        const errorCode = typeof response.code === "number" ? response.code : 0;
 
         if (store.onError) {
-          store.onError(String(errorMsg));
+          // Emit structured error for backward compatibility
+          store.onError({
+            cause: { code: errorCode, message: String(errorMsg) },
+          });
         }
 
-        reject(new Error(String(errorMsg)));
+        const err: any = new Error(String(errorMsg), { cause: errorCode });
+        if (err.cause === undefined) err.cause = errorCode; // Fallback for older targets
+        reject(err);
         return;
       }
 
@@ -127,8 +133,8 @@ const connectHandler = <T>(
       if (!event.wasClean) {
         reject(
           new Error(
-            `WebSocket closed unexpectedly (code ${event.code || "unknown"})`,
-          ),
+            `WebSocket closed unexpectedly (code ${event.code || "unknown"})`
+          )
         );
       }
       serviceConfig.onDisconnect?.(event);
@@ -152,7 +158,7 @@ const sendHandler = (
   serviceName: string,
   serviceConfig: IServiceConfig,
   methodName: string,
-  params: Record<string, unknown> = {},
+  params: Record<string, unknown> = {}
 ) => {
   const methodEntry = Object.entries(serviceConfig.methods)
     .map(([code, info]) => ({ code, info }))
@@ -160,7 +166,7 @@ const sendHandler = (
 
   if (!methodEntry) {
     throw new Error(
-      `method ${methodName} not available in ${serviceName} service`,
+      `method ${methodName} not available in ${serviceName} service`
     );
   }
 
@@ -169,11 +175,11 @@ const sendHandler = (
 
   if (!methodInfo) {
     throw new Error(
-      `method configuration missing for ${methodName} in ${serviceName} service`,
+      `method configuration missing for ${methodName} in ${serviceName} service`
     );
   }
   const paramsArray = methodInfo.parameters.map(
-    (paramName) => params[paramName],
+    (paramName) => params[paramName]
   );
 
   const payload = {
@@ -250,12 +256,9 @@ function onError(response: IResponse) {
       : {};
 
   const errorMsg =
-    params.reason ||
-    params.error ||
-    response.params ||
-    error?.message
+    params.reason || params.error || response.params || error?.message;
 
-  const errorCode = response.code ?? "Error";
+  const errorCode = typeof response.code === "number" ? response.code : 0;
 
   let methodName = "";
 
@@ -275,13 +278,17 @@ function onError(response: IResponse) {
     : String(errorMsg);
 
   if (store.onError) {
-    store.onError(fullErrorMsg);
+    store.onError({ cause: { code: errorCode, message: fullErrorMsg } });
   }
 
   const executor = store.pendingPromises[response.seq];
   if (executor) {
     clearTimeout(executor.toHandler);
-    executor.reject(new Error(`${executor.methodName || ""}: ${errorMsg}`, { cause: errorCode }));
+    const err: any = new Error(`${executor.methodName || ""}: ${errorMsg}`, {
+      cause: errorCode,
+    });
+    if (err.cause === undefined) err.cause = errorCode; // Fallback for older targets
+    executor.reject(err);
     delete store.pendingPromises[response.seq];
   } else {
     throw new Error("Unknown request failed");
