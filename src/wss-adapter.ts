@@ -305,4 +305,6 @@ function onError(response: IResponse) {
   }
 }
 
+(wssAdapter as any).__store = store;
+
 export default wssAdapter;
