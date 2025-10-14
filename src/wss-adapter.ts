@@ -5,7 +5,7 @@ import type {
   IStore,
   IWssAdapter,
   ServiceName,
-} from './types.js';
+} from "./types.js";
 const wssAdapter: IWssAdapter = {
   services: {} as Record<ServiceName, IServiceAdapter>,
   sessions: {} as ApiMethods,
@@ -63,7 +63,7 @@ wssAdapter.configure = (configuration) => {
         get:
           (_target, methodName: string) => (payload: Record<string, unknown>) =>
             sendHandler(serviceName, serviceConfig, methodName, payload),
-      },
+      }
     );
   }
 };
@@ -72,7 +72,7 @@ const connectHandler = <T>(
   serviceName: string,
   serviceConfig: IServiceConfig,
   payload: string | string[] | undefined,
-  remote?: string,
+  remote?: string
 ) => {
   return new Promise((resolve, reject) => {
     if (!payload || !Array.isArray(payload)) {
@@ -84,7 +84,7 @@ const connectHandler = <T>(
 
     const wsConnection = new WebSocket(
       remote || serviceConfig.remote,
-      protocols,
+      protocols
     );
     store.sessions[serviceName] = wsConnection;
 
@@ -127,8 +127,8 @@ const connectHandler = <T>(
       if (!event.wasClean) {
         reject(
           new Error(
-            `WebSocket closed unexpectedly (code ${event.code || "unknown"})`,
-          ),
+            `WebSocket closed unexpectedly (code ${event.code || "unknown"})`
+          )
         );
       }
       serviceConfig.onDisconnect?.(event);
@@ -152,7 +152,7 @@ const sendHandler = (
   serviceName: string,
   serviceConfig: IServiceConfig,
   methodName: string,
-  params: Record<string, unknown> = {},
+  params: Record<string, unknown> = {}
 ) => {
   const methodEntry = Object.entries(serviceConfig.methods)
     .map(([code, info]) => ({ code, info }))
@@ -160,7 +160,7 @@ const sendHandler = (
 
   if (!methodEntry) {
     throw new Error(
-      `method ${methodName} not available in ${serviceName} service`,
+      `method ${methodName} not available in ${serviceName} service`
     );
   }
 
@@ -169,11 +169,11 @@ const sendHandler = (
 
   if (!methodInfo) {
     throw new Error(
-      `method configuration missing for ${methodName} in ${serviceName} service`,
+      `method configuration missing for ${methodName} in ${serviceName} service`
     );
   }
   const paramsArray = methodInfo.parameters.map(
-    (paramName) => params[paramName],
+    (paramName) => params[paramName]
   );
 
   const payload = {
@@ -231,6 +231,22 @@ const receiveHandler = (event: { data: string }) => {
     }
   } else if (response.type === "Stream") {
     console.log("Stream response:", response);
+
+    const method = response.method;
+    const subs = store.subscriptions;
+
+    for (const [serviceName, callbacks] of Object.entries(subs)) {
+      if (callbacks && typeof callbacks[method] === "function") {
+        try {
+          callbacks[method](response);
+        } catch (err) {
+          console.error(
+            `[wss-adapter] Stream handler error in ${serviceName}:`,
+            err
+          );
+        }
+      }
+    }
   }
 };
 
@@ -250,10 +266,7 @@ function onError(response: IResponse) {
       : {};
 
   const errorMsg =
-    params.reason ||
-    params.error ||
-    response.params ||
-    error?.message
+    params.reason || params.error || response.params || error?.message;
 
   const errorCode = response.code ?? "Error";
 
@@ -281,7 +294,11 @@ function onError(response: IResponse) {
   const executor = store.pendingPromises[response.seq];
   if (executor) {
     clearTimeout(executor.toHandler);
-    executor.reject(new Error(`${executor.methodName || ""}: ${errorMsg}`, { cause: errorCode }));
+    executor.reject(
+      new Error(`${executor.methodName || ""}: ${errorMsg}`, {
+        cause: errorCode,
+      })
+    );
     delete store.pendingPromises[response.seq];
   } else {
     throw new Error("Unknown request failed");
