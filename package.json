@@ -1,6 +1,6 @@
 {
   "name": "@pathscale/wss-adapter",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "description": "Modern WebSocket adapter for PathScale WSS services",
   "type": "module",
   "main": "dist/index.js",
