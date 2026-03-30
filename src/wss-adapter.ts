@@ -189,16 +189,50 @@ const sendHandler = (
       return;
     }
 
-    session.send(JSON.stringify(payload));
-
-    store.pendingPromises[payload.seq] = {
-      resolve,
-      reject,
-      toHandler: setTimeout(() => {
-        reject(new Error(`${methodName} took too long, aborting`));
-      }, store.timeout) as any,
-      methodName,
+    const doSend = () => {
+      try {
+        session.send(JSON.stringify(payload));
+      } catch (err) {
+        store.sequence.decreaseSeq();
+        reject(err);
+        return;
+      }
+      store.pendingPromises[payload.seq] = {
+        resolve,
+        reject,
+        toHandler: setTimeout(() => {
+          reject(new Error(`${methodName} took too long, aborting`));
+        }, store.timeout) as any,
+        methodName,
+      };
     };
+
+    if (session.readyState === WebSocket.OPEN) {
+      doSend();
+    } else if (session.readyState === WebSocket.CONNECTING) {
+      const cleanup = () => {
+        session.removeEventListener("open", onOpen);
+        session.removeEventListener("error", onErr);
+        session.removeEventListener("close", onClose);
+      };
+      const onOpen = () => { cleanup(); doSend(); };
+      const onErr = () => {
+        cleanup();
+        store.sequence.decreaseSeq();
+        reject(new Error(`WebSocket failed while waiting to send ${methodName}`));
+      };
+      const onClose = () => {
+        cleanup();
+        store.sequence.decreaseSeq();
+        reject(new Error(`WebSocket closed while waiting to send ${methodName}`));
+      };
+      session.addEventListener("open", onOpen, { once: true });
+      session.addEventListener("error", onErr, { once: true });
+      session.addEventListener("close", onClose, { once: true });
+    } else {
+      store.sequence.decreaseSeq();
+      reject(new Error(`WebSocket not open (readyState=${session.readyState}), cannot send ${methodName}`));
+    }
   });
 };
 
