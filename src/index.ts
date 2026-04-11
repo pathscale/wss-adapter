@@ -5,6 +5,8 @@ export type {
   IConfiguration,
   IServiceConfig,
   IServiceAdapter,
+  IStreamingSubscriptionObserver,
+  IStreamingUnsubscribe,
   IMethodInfo,
   IErrors,
   IStore,

@@ -2,6 +2,8 @@ import type {
   ApiMethods,
   IServiceAdapter,
   IServiceConfig,
+  IStreamingSubscriptionObserver,
+  IStreamingUnsubscribe,
   IStore,
   IWssAdapter,
   ServiceName,
@@ -10,6 +12,108 @@ const wssAdapter: IWssAdapter = {
   services: {} as Record<ServiceName, IServiceAdapter>,
   sessions: {} as ApiMethods,
   configure() {},
+  subscribeTo() {
+    return () => {};
+  },
+};
+
+const streamSubscribers = new Map<
+  string,
+  Map<number, IStreamingSubscriptionObserver<unknown>>
+>();
+let streamSubscriberId = 1;
+
+const normalizeStreamEvent = (event: string): string => event.trim();
+
+const subscribeStreamEvent = (
+  event: string,
+  observer: IStreamingSubscriptionObserver<unknown>
+): IStreamingUnsubscribe => {
+  const eventName = normalizeStreamEvent(event);
+  if (!eventName) {
+    throw new Error("Stream event name is required");
+  }
+
+  const id = streamSubscriberId++;
+  const subscribers = streamSubscribers.get(eventName) ?? new Map();
+  subscribers.set(id, observer);
+  streamSubscribers.set(eventName, subscribers);
+
+  return () => {
+    const eventSubscribers = streamSubscribers.get(eventName);
+    if (!eventSubscribers) return;
+    eventSubscribers.delete(id);
+    if (eventSubscribers.size === 0) {
+      streamSubscribers.delete(eventName);
+    }
+  };
+};
+
+const notifyStreamSubscribers = (
+  eventKeys: string[],
+  notify: (observer: IStreamingSubscriptionObserver<unknown>) => void
+) => {
+  const seen = new Set<number>();
+
+  for (const eventKey of eventKeys) {
+    const subscribers = streamSubscribers.get(eventKey);
+    if (!subscribers) continue;
+
+    for (const [id, observer] of subscribers) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+
+      try {
+        notify(observer);
+      } catch (err) {
+        console.error("[wss-adapter] Stream subscriber callback failed:", err);
+      }
+    }
+  }
+};
+
+const notifyStreamCompleteAll = () => {
+  for (const subscribers of streamSubscribers.values()) {
+    for (const observer of subscribers.values()) {
+      try {
+        observer.complete?.();
+      } catch (err) {
+        console.error("[wss-adapter] Stream complete callback failed:", err);
+      }
+    }
+  }
+};
+
+const getStreamEventKeys = (method: unknown): string[] => {
+  if (method == null) return [];
+
+  const eventKeys = new Set<string>();
+  const methodCode = String(method);
+  eventKeys.add(methodCode);
+
+  for (const serviceConfig of Object.values(store.services)) {
+    const methodInfo = serviceConfig.methods?.[methodCode];
+    if (methodInfo?.name) {
+      eventKeys.add(methodInfo.name);
+    }
+  }
+
+  return [...eventKeys];
+};
+
+const getStreamPayload = (response: any): unknown => {
+  if (response?.data !== undefined) {
+    if (response.data?.data !== undefined) {
+      return response.data.data;
+    }
+    return response.data;
+  }
+
+  if (response?.params !== undefined) {
+    return response.params;
+  }
+
+  return response;
 };
 
 const store: IStore = {
@@ -68,6 +172,15 @@ wssAdapter.configure = (configuration) => {
   }
 };
 
+wssAdapter.subscribeTo = <TEvent>(
+  event: string,
+  observer: IStreamingSubscriptionObserver<TEvent>
+): IStreamingUnsubscribe =>
+  subscribeStreamEvent(
+    event,
+    observer as IStreamingSubscriptionObserver<unknown>
+  );
+
 const connectHandler = <T>(
   serviceName: string,
   serviceConfig: IServiceConfig,
@@ -124,6 +237,9 @@ const connectHandler = <T>(
     };
 
     wsConnection.onclose = (event) => {
+      delete store.sessions[serviceName];
+      notifyStreamCompleteAll();
+
       if (!event.wasClean) {
         reject(
           new Error(
@@ -145,6 +261,7 @@ const disconnectHandler = (serviceName: string) => {
   const session = store.sessions[serviceName];
   if (session) {
     session.close();
+    delete store.sessions[serviceName];
   }
 };
 
@@ -281,6 +398,14 @@ const receiveHandler = (event: { data: string }) => {
         }
       }
     }
+
+    const eventKeys = getStreamEventKeys(method);
+    if (eventKeys.length > 0) {
+      const payload = getStreamPayload(response);
+      notifyStreamSubscribers(eventKeys, (observer) => {
+        observer.next(payload);
+      });
+    }
   }
 };
 
@@ -334,11 +459,21 @@ function onError(response: IResponse) {
       })
     );
     delete store.pendingPromises[response.seq];
-  } else {
-    throw new Error("Unknown request failed");
+    return;
   }
-}
 
-(wssAdapter as any).__store = store;
+  if (response.method != null) {
+    const eventKeys = getStreamEventKeys(response.method);
+    if (eventKeys.length > 0) {
+      const streamError = new Error(fullErrorMsg);
+      notifyStreamSubscribers(eventKeys, (observer) => {
+        observer.error?.(streamError);
+      });
+      return;
+    }
+  }
+
+  throw new Error("Unknown request failed");
+}
 
 export default wssAdapter;

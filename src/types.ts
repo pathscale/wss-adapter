@@ -56,6 +56,14 @@ export interface IServiceAdapter {
   disconnect: () => void;
 }
 
+export interface IStreamingSubscriptionObserver<TEvent = unknown> {
+  next: (data: TEvent) => void;
+  error?: (err: Error) => void;
+  complete?: () => void;
+}
+
+export type IStreamingUnsubscribe = () => void;
+
 export type ServiceName = "app";
 
 export type ApiMethods = {
@@ -66,4 +74,8 @@ export interface IWssAdapter {
   services: Record<ServiceName, IServiceAdapter>;
   sessions: ApiMethods;
   configure: (configuration: IConfiguration) => void;
+  subscribeTo: <TEvent = unknown>(
+    event: string,
+    observer: IStreamingSubscriptionObserver<TEvent>
+  ) => IStreamingUnsubscribe;
 }

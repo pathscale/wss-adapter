@@ -43,6 +43,16 @@ const result = await wssAdapter.services.app.connect(['token1', 'token2']);
 const profile = await wssAdapter.sessions.app.getUserProfile({ userId: '123' });
 const login = await wssAdapter.sessions.app.login({ username: 'user', password: 'pass' });
 
+// Subscribe to stream events (by method code or configured method name)
+const unsubscribe = wssAdapter.subscribeTo('UserSubBulkOrderPlacedEvent', {
+  next: (data) => console.log('Stream data:', data),
+  error: (err) => console.error('Stream error:', err),
+  complete: () => console.log('Stream completed'),
+});
+
+// Later
+unsubscribe();
+
 // Disconnect
 wssAdapter.services.app.disconnect();
 ```
