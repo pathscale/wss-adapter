@@ -138,6 +138,22 @@ const store: IStore = {
   pendingPromises: {},
 };
 
+/**
+ * Reject all pending promises and clear their timeout handlers.
+ * Called when a WebSocket connection closes (clean or unclean) and
+ * when disconnectHandler is invoked, so no API call promise is ever
+ * left hanging after the transport is gone.
+ */
+const rejectPendingPromises = (reason: string) => {
+  for (const [seq, executor] of Object.entries(store.pendingPromises)) {
+    clearTimeout(executor.toHandler);
+    executor.reject(
+      new Error(`${executor.methodName}: ${reason}`)
+    );
+    delete store.pendingPromises[Number(seq)];
+  }
+};
+
 wssAdapter.configure = (configuration) => {
   const { timeout, services, errors, onError } = configuration;
 
@@ -238,6 +254,12 @@ const connectHandler = <T>(
 
     wsConnection.onclose = (event) => {
       delete store.sessions[serviceName];
+
+      // Reject every in-flight API call so callers never hang.
+      rejectPendingPromises(
+        `WebSocket closed (code ${event.code || "unknown"})`
+      );
+
       notifyStreamCompleteAll();
 
       if (!event.wasClean) {
@@ -260,6 +282,10 @@ const connectHandler = <T>(
 const disconnectHandler = (serviceName: string) => {
   const session = store.sessions[serviceName];
   if (session) {
+    // Reject pending promises before closing so callers don't hang.
+    rejectPendingPromises(
+      `Service ${serviceName} disconnected`
+    );
     session.close();
     delete store.sessions[serviceName];
   }
