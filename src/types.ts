@@ -54,6 +54,7 @@ export interface IStore {
 export interface IServiceAdapter {
   connect: <T>(payload?: string | string[], remote?: string) => Promise<T>;
   disconnect: () => void;
+  isOpen: () => boolean;
 }
 
 export interface IStreamingSubscriptionObserver<TEvent = unknown> {
@@ -78,4 +79,5 @@ export interface IWssAdapter {
     event: string,
     observer: IStreamingSubscriptionObserver<TEvent>
   ) => IStreamingUnsubscribe;
+  __store: IStore;
 }

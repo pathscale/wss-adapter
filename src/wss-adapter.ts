@@ -15,6 +15,7 @@ const wssAdapter: IWssAdapter = {
   subscribeTo() {
     return () => {};
   },
+  __store: undefined as unknown as IStore,
 };
 
 const streamSubscribers = new Map<
@@ -171,13 +172,14 @@ wssAdapter.configure = (configuration) => {
       connect: <T>(payload?: string | string[], remote?: string) =>
         connectHandler<T>(serviceName, serviceConfig, payload, remote),
       disconnect: () => disconnectHandler(serviceName),
+      isOpen: () => store.sessions[serviceName]?.readyState === WebSocket.OPEN,
     };
 
     if (serviceConfig.subscriptions) {
       store.subscriptions[serviceName] = serviceConfig.subscriptions;
     }
 
-    (wssAdapter.sessions as any)[serviceName] = new Proxy(
+    (wssAdapter.sessions as Record<string, unknown>)[serviceName] = new Proxy(
       {},
       {
         get:
@@ -210,6 +212,20 @@ const connectHandler = <T>(
     }
 
     const protocols = payload as string[];
+
+    // Close the previous WebSocket (if any) so its onclose handler
+    // does not fire later and tear down an already-rotated connection.
+    const prev = store.sessions[serviceName];
+    if (prev) {
+      prev.onclose = null;
+      prev.onerror = null;
+      prev.onmessage = null;
+      try {
+        prev.close();
+      } catch {
+        // Ignore — may already be closed.
+      }
+    }
 
     const wsConnection = new WebSocket(
       remote || serviceConfig.remote,
@@ -345,7 +361,7 @@ const sendHandler = (
         reject,
         toHandler: setTimeout(() => {
           reject(new Error(`${methodName} took too long, aborting`));
-        }, store.timeout) as any,
+        }, store.timeout) as unknown as number,
         methodName,
       };
     };
@@ -501,5 +517,7 @@ function onError(response: IResponse) {
 
   throw new Error("Unknown request failed");
 }
+
+wssAdapter.__store = store;
 
 export default wssAdapter;
