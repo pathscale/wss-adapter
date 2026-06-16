@@ -1,3 +1,4 @@
+import { buildServiceError } from "./errors.js";
 import type {
   ApiMethods,
   IServiceAdapter,
@@ -250,14 +251,16 @@ const connectHandler = <T>(
       }
 
       if (response.type === "Error" || response.code) {
-        const error = store.errors.codes.find((c) => c.code === response.code);
-        const errorMsg = response.params || error?.message || response.code;
+        const catalog = store.errors.codes.find((c) => c.code === response.code);
+        const serviceError = buildServiceError(response, {
+          catalogMessage: catalog?.message,
+        });
 
         if (store.onError) {
-          store.onError(String(errorMsg));
+          store.onError(serviceError.message);
         }
 
-        reject(new Error(String(errorMsg)));
+        reject(serviceError);
         return;
       }
 
@@ -460,19 +463,9 @@ interface IResponse {
 }
 
 function onError(response: IResponse) {
-  const error = store.errors.codes.find((c) => c.code === response.code);
-  const params =
-    typeof response.params === "object" && response.params !== null
-      ? response.params
-      : {};
-
-  const errorMsg =
-    params.reason || params.error || response.params || error?.message;
-
-  const errorCode = response.code ?? "Error";
+  const catalog = store.errors.codes.find((c) => c.code === response.code);
 
   let methodName = "";
-
   if (response.method) {
     for (const serviceConfig of Object.values(store.services)) {
       const methodKey = response.method.toString();
@@ -484,9 +477,15 @@ function onError(response: IResponse) {
     }
   }
 
+  const serviceError = buildServiceError(response, {
+    methodName,
+    catalogMessage: catalog?.message,
+  });
+
+  const errorCode = response.code ?? "Error";
   const fullErrorMsg = methodName
-    ? `[${errorCode}]: ${methodName}: ${errorMsg}`
-    : String(errorMsg);
+    ? `[${errorCode}]: ${methodName}: ${serviceError.message}`
+    : serviceError.message;
 
   if (store.onError) {
     store.onError(fullErrorMsg);
@@ -495,11 +494,7 @@ function onError(response: IResponse) {
   const executor = store.pendingPromises[response.seq];
   if (executor) {
     clearTimeout(executor.toHandler);
-    executor.reject(
-      new Error(`${executor.methodName || ""}: ${errorMsg}`, {
-        cause: errorCode,
-      })
-    );
+    executor.reject(serviceError);
     delete store.pendingPromises[response.seq];
     return;
   }
@@ -507,9 +502,8 @@ function onError(response: IResponse) {
   if (response.method != null) {
     const eventKeys = getStreamEventKeys(response.method);
     if (eventKeys.length > 0) {
-      const streamError = new Error(fullErrorMsg);
       notifyStreamSubscribers(eventKeys, (observer) => {
-        observer.error?.(streamError);
+        observer.error?.(serviceError);
       });
       return;
     }
