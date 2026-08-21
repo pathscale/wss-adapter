@@ -29,6 +29,7 @@
         "useExhaustiveDependencies": "warn"
       },
       "style": {
+        "useImportType": "off",
         "noVar": "error",
         "useConst": "error"
       },
