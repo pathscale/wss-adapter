@@ -5,7 +5,7 @@ WebSocket adapter for PathScale WSS services.
 ## Installation
 
 ```bash
-npm install @pathscale/wss-adapter
+bun add @pathscale/wss-adapter
 ```
 
 ## Usage
@@ -37,7 +37,11 @@ wssAdapter.configure({
 });
 
 // Connect
+const stopStatus = wssAdapter.services.app.subscribeStatus((status) => {
+  console.log('Connection status:', status);
+});
 const result = await wssAdapter.services.app.connect(['token1', 'token2']);
+console.log(wssAdapter.services.app.status); // connected
 
 // Call methods
 const profile = await wssAdapter.sessions.app.getUserProfile({ userId: '123' });
@@ -55,7 +59,43 @@ unsubscribe();
 
 // Disconnect
 wssAdapter.services.app.disconnect();
+stopStatus();
 ```
+
+Each configured service is a named `ServiceConnection` instance. It owns its socket,
+sequence counter, pending calls, request and authentication timers, reconnect backoff,
+and status. `configure`, `services[name].connect/disconnect/isOpen`,
+`sessions[name][method]`, and `subscribeTo` remain the facade for using these instances.
+Reconfiguration disconnects the previous instances and replaces the configured services.
+
+When a socket closes (cleanly or unexpectedly), errors, or is deliberately disconnected,
+only that service's pending calls reject. Other services continue normally. Deliberate
+disconnects detach all socket handlers before closing and cancel scheduled reconnects.
+Replacing a connection also rejects its outstanding calls. Sequence numbers increase
+within an instance, including across reconnects; failed sends never reuse a number.
+
+`service.status` is `down` initially, `reconnecting` while connecting or retrying, and
+`connected` after the authentication reply. `service.subscribeStatus(callback)` immediately
+reports the current status, then reports changes, and returns an unsubscribe function.
+`isOpen()` reports the transport's open state; authentication may still be pending.
+
+After transport or authentication failure, the service reconnects using the protocols and
+remote from its latest `connect` call. Defaults are five consecutive retry attempts, starting
+at 1 second and doubling up to 30 seconds. Successful authentication resets the retry count.
+Exhausting retries sets status to `down`; deliberate disconnect also sets it to `down`.
+Set `reconnect: false` to disable retries, or configure `initialDelay`, `maxDelay` (milliseconds),
+and `maxAttempts` per service. `connect()` rejects if its initial connection fails; background
+retries report progress through status. The configured timeout bounds authentication too.
+
+Requests are never automatically replayed. A timeout or lost connection leaves the server-side
+outcome unknown: the server may already have performed the action. Late replies cannot settle
+an already rejected promise. Reconcile the outcome or use server-supported idempotency before
+retrying an action that must not run twice.
+
+Legacy configured stream callbacks run only for the service receiving the event. Facade stream
+subscriptions remain an event bus across services (by method code or configured method name).
+One service closing does not complete subscriptions that may still receive another service's
+events; unsubscribe explicitly when finished.
 
 ## Configuration Types
 
@@ -72,6 +112,12 @@ interface IServiceConfig {
   methods: Record<string, IMethodInfo>;
   subscriptions?: Record<string, (data: any) => void>;
   onDisconnect?: (event: CloseEvent) => void;
+  timeout?: number; // Overrides the global timeout for this instance, in milliseconds
+  reconnect?: false | {
+    initialDelay?: number;
+    maxDelay?: number;
+    maxAttempts?: number;
+  };
 }
 
 interface IErrors {
