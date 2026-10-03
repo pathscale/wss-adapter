@@ -1,5 +1,6 @@
 export { default } from './wss-adapter.js';
 export { default as wssAdapter } from './wss-adapter.js';
+export { ServiceConnection } from './service-connection.js';
 export { WssServiceError, buildServiceError } from './errors.js';
 export type {
   WssServiceErrorInit,
@@ -17,4 +18,5 @@ export type {
   IStore,
   ApiMethods,
   ServiceName,
+  ServiceStatus,
 } from './types.js';
