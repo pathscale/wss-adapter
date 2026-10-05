@@ -141,4 +141,8 @@ services: {
 }
 ```
 
-That's it.
+## Trusted npm publishing
+
+Publishing is performed manually by `.github/workflows/publish.yml` from an exact current `master` commit and a matching `vMAJOR.MINOR.PATCH` tag. Configure npm Trusted Publishing for `pathscale/wss-adapter`, workflow `publish.yml`, and GitHub environment `npm-publish`; restrict that environment to `master`. The workflow validates the commit, tag, package version, registry state, and package contents before publishing a digest-verified tarball with provenance. It does not use an npm token or publish on tag push.
+
+See [the npm publishing release procedure](docs/npm-publishing.md) for publisher setup and release steps.
