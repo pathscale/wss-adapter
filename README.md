@@ -100,11 +100,14 @@ events; unsubscribe explicitly when finished.
 ## Configuration Types
 
 ```typescript
+import type { WssServiceError } from '@pathscale/wss-adapter';
+
 interface IConfiguration {
   timeout: number;
   services: Record<string, IServiceConfig>;
   errors: IErrors;
   onError?: (message: string) => void;
+  onServiceError?: (error: WssServiceError) => void;
 }
 
 interface IServiceConfig {
@@ -125,6 +128,10 @@ interface IErrors {
   codes: IErrorCode[];
 }
 ```
+
+`onError` remains the legacy string callback. For WSS service-error responses, the optional
+`onServiceError` callback receives the exported `WssServiceError` with structured fields
+such as `code`, `kind`, `params`, `serviceMessage`, and `cause`.
 
 ## Subscriptions
 

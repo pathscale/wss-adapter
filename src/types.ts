@@ -1,3 +1,5 @@
+import type { WssServiceError } from './errors.js';
+
 export interface IMethodInfo {
   name: string;
   parameters: string[];
@@ -27,6 +29,7 @@ export interface IConfiguration {
   services: Record<string, IServiceConfig>;
   errors: IErrors;
   onError?: (message: string) => void;
+  onServiceError?: (error: WssServiceError) => void;
 }
 
 export interface IStore {

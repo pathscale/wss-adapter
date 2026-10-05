@@ -263,6 +263,11 @@ export class ServiceConnection implements IServiceAdapter {
     )?.message;
     const error = buildServiceError(response, { methodName, catalogMessage });
     try {
+      this.configuration.onServiceError?.(error);
+    } catch {
+      console.error('[wss-adapter] Structured error callback failed');
+    }
+    try {
       this.configuration.onError?.(
         methodName
           ? `[${response.code ?? 'Error'}]: ${methodName}: ${error.message}`
