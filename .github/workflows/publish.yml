@@ -1,0 +1,282 @@
+name: Publish to npm
+run-name: Publish @pathscale/wss-adapter from master ${{ inputs.master_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      master_sha:
+        description: Full current master SHA for the reviewed and tagged release revision
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-${{ inputs.master_sha }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    outputs:
+      master_sha: ${{ steps.validate.outputs.master_sha }}
+      version: ${{ steps.validate.outputs.version }}
+      tag: ${{ steps.validate.outputs.tag }}
+    steps:
+      - name: Validate master, package version, exact tag, and registry state before checkout
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.master_sha }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          die() { echo "::error::$1" >&2; exit 1; }
+          api_json() { gh api "repos/$REPOSITORY/$1"; }
+          resolve_tag_commit() {
+            local tag_ref="$1" response object_type object_sha level
+            response="$(api_json "git/ref/tags/$tag_ref")"
+            object_type="$(jq -er '.object.type' <<<"$response")"
+            object_sha="$(jq -er '.object.sha' <<<"$response")"
+            for level in 1 2 3 4; do
+              if [[ "$object_type" == "commit" ]]; then
+                printf '%s\n' "$object_sha"
+                return 0
+              fi
+              [[ "$object_type" == "tag" ]] || die "release tag does not resolve to a commit"
+              response="$(api_json "git/tags/$object_sha")"
+              object_type="$(jq -er '.object.type' <<<"$response")"
+              object_sha="$(jq -er '.object.sha' <<<"$response")"
+            done
+            die "release tag has too many nested tag objects"
+          }
+
+          [[ "$REPOSITORY" == "pathscale/wss-adapter" ]] || die "publisher is restricted to pathscale/wss-adapter"
+          [[ "$DISPATCH_REF" == "refs/heads/master" ]] || die "dispatch this workflow from master"
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || die "master_sha must be a full lowercase 40-character SHA"
+          [[ "$TARGET_SHA" == "$DISPATCH_SHA" ]] || die "input SHA does not match the selected master revision"
+
+          current_master="$(api_json "git/ref/heads/master" | jq -er '.object.sha')"
+          [[ "$current_master" == "$TARGET_SHA" ]] || die "master moved; dispatch again for its exact current SHA"
+
+          package_doc="$(api_json "contents/package.json?ref=$TARGET_SHA")"
+          package_base64="$(jq -er '.content' <<<"$package_doc" | tr -d '\n')"
+          package_json="$(printf '%s' "$package_base64" | base64 --decode)"
+          package_name="$(jq -er '.name' <<<"$package_json")"
+          version="$(jq -er '.version' <<<"$package_json")"
+          [[ "$package_name" == "@pathscale/wss-adapter" ]] || die "tagged package name does not match the npm package"
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || die "only stable MAJOR.MINOR.PATCH versions can be published"
+          tag="v$version"
+          tagged_commit="$(resolve_tag_commit "$tag")"
+          [[ "$tagged_commit" == "$TARGET_SHA" ]] || die "version tag must point exactly to the current reviewed master SHA"
+
+          registry_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://registry.npmjs.org/%40pathscale%2Fwss-adapter/$version")"
+          [[ "$registry_status" == "404" ]] || die "npm version is already published or registry availability could not be confirmed"
+
+          printf 'master_sha=%s\n' "$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: guard
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      tarball_sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - name: Checkout the exact guarded revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.guard.outputs.master_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Recheck exact current master, version tag, and package metadata before installation or code
+        env:
+          TARGET_SHA: ${{ needs.guard.outputs.master_sha }}
+          EXPECTED_VERSION: ${{ needs.guard.outputs.version }}
+          RELEASE_TAG: ${{ needs.guard.outputs.tag }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          die() { echo "::error::$1" >&2; exit 1; }
+          [[ "$DISPATCH_REF" == "refs/heads/master" ]] || die "dispatch this workflow from master"
+          [[ "$DISPATCH_SHA" == "$TARGET_SHA" ]] || die "workflow revision no longer matches the guarded SHA"
+          [[ "$(git rev-parse HEAD)" == "$TARGET_SHA" ]] || die "checkout does not match the guarded SHA"
+          git fetch --no-tags origin \
+            refs/heads/master:refs/remotes/origin/master \
+            "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          [[ "$(git rev-parse refs/remotes/origin/master)" == "$TARGET_SHA" ]] || die "origin/master moved before validation"
+          [[ "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" == "$TARGET_SHA" ]] || die "release tag no longer points exactly to master"
+          [[ "$(jq -er '.name' package.json)" == "@pathscale/wss-adapter" ]] || die "package name changed after preflight"
+          [[ "$(jq -er '.version' package.json)" == "$EXPECTED_VERSION" ]] || die "package version changed after preflight"
+          [[ "$RELEASE_TAG" == "v$EXPECTED_VERSION" ]] || die "release tag does not match package version"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Install locked development dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Build
+        run: bun run build
+
+      - name: Inspect npm pack contents
+        env:
+          EXPECTED_VERSION: ${{ needs.guard.outputs.version }}
+          PACK_REPORT: ${{ runner.temp }}/npm-pack-dry-run.json
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json --ignore-scripts > "$PACK_REPORT"
+          node - "$PACK_REPORT" "$EXPECTED_VERSION" <<'NODE'
+          const fs = require('node:fs');
+          const reports = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const expectedVersion = process.argv[3];
+          if (reports.length !== 1) throw new Error('expected one npm pack report');
+          const report = reports[0];
+          if (report.name !== '@pathscale/wss-adapter' || report.version !== expectedVersion) {
+            throw new Error('packed package name or version does not match the guarded release');
+          }
+          const files = report.files.map(({ path }) => path);
+          const allowed = (path) => path === 'package.json' || path === 'README.md' || path.startsWith('dist/');
+          if (files.some((path) => !allowed(path))) throw new Error('npm pack contains a file outside package.json, README.md, and dist/');
+          if (!files.includes('dist/index.js') || !files.includes('dist/index.d.ts')) {
+            throw new Error('npm pack is missing the published JavaScript entry point or declarations');
+          }
+          NODE
+
+      - name: Pack the validated release
+        id: pack
+        env:
+          EXPECTED_VERSION: ${{ needs.guard.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          npm pack --ignore-scripts --json --pack-destination release > "$RUNNER_TEMP/npm-pack.json"
+          packed_name="$(node -e 'const fs=require("node:fs"); const reports=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (reports.length !== 1 || reports[0].version !== process.argv[2]) process.exit(1); process.stdout.write(reports[0].filename);' "$RUNNER_TEMP/npm-pack.json" "$EXPECTED_VERSION")"
+          test -f "release/$packed_name"
+          mv "release/$packed_name" release/package.tgz
+          sha256="$(sha256sum release/package.tgz | cut -d ' ' -f 1)"
+          printf 'sha256=%s\n' "$sha256" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-tarball-${{ needs.guard.outputs.version }}-${{ needs.guard.outputs.master_sha }}
+          path: release/package.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [guard, build]
+    runs-on: ubuntu-24.04
+    environment:
+      name: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Recheck exact current master, version tag, and unpublished registry version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.guard.outputs.master_sha }}
+          EXPECTED_VERSION: ${{ needs.guard.outputs.version }}
+          RELEASE_TAG: ${{ needs.guard.outputs.tag }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          die() { echo "::error::$1" >&2; exit 1; }
+          api_json() { gh api "repos/$REPOSITORY/$1"; }
+          resolve_tag_commit() {
+            local tag_ref="$1" response object_type object_sha level
+            response="$(api_json "git/ref/tags/$tag_ref")"
+            object_type="$(jq -er '.object.type' <<<"$response")"
+            object_sha="$(jq -er '.object.sha' <<<"$response")"
+            for level in 1 2 3 4; do
+              if [[ "$object_type" == "commit" ]]; then
+                printf '%s\n' "$object_sha"
+                return 0
+              fi
+              [[ "$object_type" == "tag" ]] || die "release tag does not resolve to a commit"
+              response="$(api_json "git/tags/$object_sha")"
+              object_type="$(jq -er '.object.type' <<<"$response")"
+              object_sha="$(jq -er '.object.sha' <<<"$response")"
+            done
+            die "release tag has too many nested tag objects"
+          }
+          [[ "$REPOSITORY" == "pathscale/wss-adapter" ]] || die "publisher is restricted to pathscale/wss-adapter"
+          [[ "$DISPATCH_REF" == "refs/heads/master" && "$DISPATCH_SHA" == "$TARGET_SHA" ]] || die "publish job is not running for the guarded master SHA"
+          [[ "$(api_json "git/ref/heads/master" | jq -er '.object.sha')" == "$TARGET_SHA" ]] || die "master moved before publication"
+          [[ "$(resolve_tag_commit "$RELEASE_TAG")" == "$TARGET_SHA" ]] || die "release tag moved before publication"
+          [[ "$RELEASE_TAG" == "v$EXPECTED_VERSION" ]] || die "release tag does not match the package version"
+          registry_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://registry.npmjs.org/%40pathscale%2Fwss-adapter/$EXPECTED_VERSION")"
+          [[ "$registry_status" == "404" ]] || die "npm version is already published or registry availability could not be confirmed"
+
+      - name: Checkout only to bind provenance to the reviewed commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.guard.outputs.master_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify provenance checkout and tag again
+        env:
+          TARGET_SHA: ${{ needs.guard.outputs.master_sha }}
+          RELEASE_TAG: ${{ needs.guard.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$TARGET_SHA" ]]
+          git fetch --no-tags origin \
+            refs/heads/master:refs/remotes/origin/master \
+            "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          [[ "$(git rev-parse refs/remotes/origin/master)" == "$TARGET_SHA" ]]
+          [[ "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" == "$TARGET_SHA" ]]
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-tarball-${{ needs.guard.outputs.version }}-${{ needs.guard.outputs.master_sha }}
+          path: release
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Verify tarball digest and manifest without running package scripts
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.tarball_sha256 }}
+          EXPECTED_VERSION: ${{ needs.guard.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha256="$(sha256sum release/package.tgz | cut -d ' ' -f 1)"
+          [[ "$actual_sha256" == "$EXPECTED_SHA256" ]] || { echo "::error::tarball digest mismatch" >&2; exit 1; }
+          tar -xOf release/package.tgz package/package.json > "$RUNNER_TEMP/published-package.json"
+          [[ "$(jq -er '.name' "$RUNNER_TEMP/published-package.json")" == "@pathscale/wss-adapter" ]]
+          [[ "$(jq -er '.version' "$RUNNER_TEMP/published-package.json")" == "$EXPECTED_VERSION" ]]
+          npm_version="$(npm --version)"
+          node -e 'const [major, minor, patch = 0] = process.argv[1].split(".").map(Number); if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) process.exit(1);' "$npm_version" || {
+            echo "::error::npm 11.5.1 or newer is required for Trusted Publishing; found $npm_version" >&2
+            exit 1
+          }
+
+      - name: Publish with npm Trusted Publishing and provenance
+        run: npm publish ./release/package.tgz --ignore-scripts --access public --provenance --registry=https://registry.npmjs.org/
