@@ -1,4 +1,4 @@
-import { buildServiceError } from './errors.js';
+import { buildServiceError, WssTransportError } from './errors.js';
 import type { IConfiguration, IServiceAdapter, IServiceConfig, ServiceStatus } from './types.js';
 
 interface Response {
@@ -128,10 +128,15 @@ export class ServiceConnection implements IServiceAdapter {
     this.setStatus('down');
   };
 
-  private rejectPending(reason: string) {
+  private rejectPending(reason: string | Error) {
+    const message = typeof reason === 'string' ? reason : reason.message;
     for (const call of this.pending.values()) {
       clearTimeout(call.timer);
-      call.reject(new Error(`${call.methodName}: ${reason}`));
+      call.reject(
+        reason instanceof WssTransportError
+          ? reason.withMethod(call.methodName)
+          : new Error(`${call.methodName}: ${message}`)
+      );
     }
     this.pending.clear();
   }
@@ -140,7 +145,7 @@ export class ServiceConnection implements IServiceAdapter {
     this.detachSocket();
     this.cancelConnect?.(reason);
     this.cancelConnect = undefined;
-    this.rejectPending(reason.message);
+    this.rejectPending(reason);
     const reconnect = this.reconnect;
     if (reconnect && this.attempts < reconnect.maxAttempts) {
       const delay = Math.min(reconnect.initialDelay * 2 ** this.attempts++, reconnect.maxDelay);
@@ -207,10 +212,18 @@ export class ServiceConnection implements IServiceAdapter {
     };
     socket.onclose = (event) => {
       if (this.socket === socket)
-        this.failed(new Error(`WebSocket closed (code ${event.code || 'unknown'})`), event);
+        this.failed(
+          new WssTransportError(`WebSocket closed (code ${event.code || 'unknown'})`, {
+            code: event.code,
+            wasClean: event.wasClean,
+          }),
+          event
+        );
     };
+    // The WebSocket failure algorithm dispatches `close` after `error`.
+    // Keep the handlers attached so close metadata survives for callers.
     socket.onerror = () => {
-      if (this.socket === socket) this.failed(new Error('WebSocket connection failed'));
+      // Wait for the paired close event, which carries the transport code.
     };
   }
 

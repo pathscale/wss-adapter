@@ -133,6 +133,8 @@ interface IErrors {
 `onServiceError` callback receives the exported `WssServiceError` with structured fields
 such as `code`, `kind`, `params`, `serviceMessage`, and `cause`.
 
+Transport closes reject connection and pending-call promises with `WssTransportError`. It carries the close `code`, `wasClean`, and the pending `method` name when applicable; message text keeps the existing shape. A WebSocket `error` event waits for its paired `close` event so the close metadata survives. Authentication and request deadlines remain in force. Deliberate disconnects, timeouts, constructor failures, and server-response `WssServiceError` remain distinct; consumers should use the exported error type and fields rather than parse message text.
+
 ## Subscriptions
 
 ```typescript

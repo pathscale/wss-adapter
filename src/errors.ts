@@ -1,3 +1,33 @@
+export interface WssTransportErrorInit {
+  code: number;
+  wasClean: boolean;
+  method?: string | undefined;
+}
+
+/** WebSocket close metadata, kept separate from server authorization errors. */
+export class WssTransportError extends Error {
+  readonly code: number;
+  readonly wasClean: boolean;
+  readonly method: string | undefined;
+
+  constructor(message: string, init: WssTransportErrorInit) {
+    super(message);
+    this.name = "WssTransportError";
+    this.code = init.code;
+    this.wasClean = init.wasClean;
+    this.method = init.method;
+    Object.setPrototypeOf(this, WssTransportError.prototype);
+  }
+
+  withMethod(method: string): WssTransportError {
+    return new WssTransportError(`${method}: ${this.message}`, {
+      code: this.code,
+      wasClean: this.wasClean,
+      method,
+    });
+  }
+}
+
 export interface WssServiceErrorInit<TParams = unknown> {
   code?: number | undefined;
   kind?: string | undefined;
