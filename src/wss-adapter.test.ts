@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { IServiceAdapter, IServiceConfig, ServiceStatus } from './types.js';
+import { WssTransportError } from './errors.js';
 import wssAdapter from './wss-adapter.js';
 
 class FakeWebSocket extends EventTarget {
@@ -201,6 +202,20 @@ describe('independent service connections', () => {
     expect(first.sent).toHaveLength(2);
   });
 
+  it('preserves abnormal close metadata when error precedes close', async () => {
+    const socket = await connect('first');
+    const call = request('first');
+
+    socket.onerror?.();
+    expect(services.first!.status).toBe('connected');
+    socket.close(1006, false);
+
+    const result = await call;
+    expect(result.error).toBeInstanceOf(WssTransportError);
+    expect(result.error).toMatchObject({ code: 1006, wasClean: false, method: 'read' });
+    expect(result.error).toHaveProperty('message', 'read: WebSocket closed (code 1006)');
+  });
+
   it('reconnects a flapping service while its peer keeps completing calls', async () => {
     configure({ reconnect: { initialDelay: 5, maxDelay: 10 } });
     let first = await connect('first');
@@ -252,6 +267,7 @@ describe('independent service connections', () => {
     const retry = FakeWebSocket.instances.at(-1)!;
     expect(FakeWebSocket.instances).toHaveLength(2);
     retry.onerror?.();
+    retry.close(1006, false);
     await Bun.sleep(4);
     expect(FakeWebSocket.instances).toHaveLength(2);
     await Bun.sleep(12);
