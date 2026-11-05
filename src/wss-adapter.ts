@@ -23,14 +23,16 @@ let streamSubscriberId = 1;
 const normalizeStreamEvent = (event: string): string => event.trim();
 
 const subscribeStreamEvent = (
+  service: string,
   event: string,
   observer: IStreamingSubscriptionObserver<unknown>
 ): IStreamingUnsubscribe => {
-  const eventName = normalizeStreamEvent(event);
-  if (!eventName) {
+  const normalized = normalizeStreamEvent(event);
+  if (!normalized) {
     throw new Error('Stream event name is required');
   }
 
+  const eventName = JSON.stringify([service, normalized]);
   const id = streamSubscriberId++;
   const subscribers = streamSubscribers.get(eventName) ?? new Map();
   subscribers.set(id, observer);
@@ -70,14 +72,15 @@ const notifyStreamSubscribers = (
 };
 
 wssAdapter.configure = (configuration) => {
+  streamSubscribers.clear();
   for (const connection of Object.values(wssAdapter.services)) connection.disconnect();
   for (const name of Object.keys(wssAdapter.services)) delete wssAdapter.services[name];
   for (const name of Object.keys(wssAdapter.sessions)) delete wssAdapter.sessions[name];
   for (const [name, config] of Object.entries(configuration.services)) {
     const connection = new ServiceConnection(name, config, configuration, (response, error) => {
-      const keys = [String(response.method)];
+      const keys = [JSON.stringify([name, String(response.method)])];
       const methodName = config.methods[String(response.method)]?.name;
-      if (methodName) keys.push(methodName);
+      if (methodName) keys.push(JSON.stringify([name, normalizeStreamEvent(methodName)]));
       if (error) {
         notifyStreamSubscribers(keys, (observer) => observer.error?.(error));
       } else {
@@ -102,8 +105,12 @@ wssAdapter.configure = (configuration) => {
   }
 };
 
-wssAdapter.subscribeTo = (event, observer) =>
-  subscribeStreamEvent(event, observer as IStreamingSubscriptionObserver<unknown>);
+wssAdapter.subscribeTo = (event, observer, service = 'app') => {
+  if (!Object.hasOwn(wssAdapter.services, service)) {
+    throw new Error('Unknown stream service');
+  }
+  return subscribeStreamEvent(service, event, observer as IStreamingSubscriptionObserver<unknown>);
+};
 wssAdapter.__store.connections = wssAdapter.services;
 
 export default wssAdapter;
