@@ -110,7 +110,15 @@ describe('pending requests per service', () => {
 
       first.close(1001, wasClean);
       for (const call of firstCalls) {
-        expect(await call).toEqual({ error: new Error('read: WebSocket closed (code 1001)') });
+        expect(await call).toMatchObject({
+          error: {
+            name: 'WssTransportError',
+            message: 'read: WebSocket closed (code 1001)',
+            code: 1001,
+            wasClean,
+            method: 'read',
+          },
+        });
       }
       expect(secondSettled).toBe(false);
       expect(services.second!.isOpen()).toBe(true);
@@ -254,9 +262,10 @@ describe('independent service connections', () => {
     retry.onerror?.();
     await Bun.sleep(4);
     expect(FakeWebSocket.instances).toHaveLength(2);
-    await Bun.sleep(12);
-    FakeWebSocket.instances.at(-1)!.close(1006, false);
+    retry.close(1006, false);
+    await Bun.sleep(15);
     expect(FakeWebSocket.instances).toHaveLength(3);
+    FakeWebSocket.instances.at(-1)!.close(1006, false);
     expect(states).toEqual(['down', 'reconnecting', 'connected', 'reconnecting', 'down']);
   });
 
@@ -352,11 +361,15 @@ describe('independent service connections', () => {
     unsubscribe();
   });
 
-  it('keeps configure, connect result, method proxies and stream facade compatible', async () => {
+  it('scopes facade stream subscriptions to the selected service', async () => {
     const received: unknown[] = [];
     const callbacks: unknown[] = [];
     configure({ subscriptions: { '1': (response) => callbacks.push(response) } });
-    const unsubscribe = wssAdapter.subscribeTo('read', { next: (data) => received.push(data) });
+    const unsubscribe = wssAdapter.subscribeTo(
+      'read',
+      { next: (data) => received.push(data) },
+      'first'
+    );
     const connected = services.first!.connect(['test-protocol']);
     const first = FakeWebSocket.instances.at(-1)!;
     first.receive({ type: 'Immediate', method: 20000, params: { accessToken: 'test-session' } });
@@ -365,9 +378,10 @@ describe('independent service connections', () => {
     const second = await connect('second');
     second.receive({ type: 'Stream', method: 1, params: { value: 1 } });
     expect(callbacks).toHaveLength(0);
+    expect(received).toEqual([]);
     first.receive({ type: 'Stream', method: 1, data: { data: { value: 2 } } });
     expect(callbacks).toHaveLength(1);
-    expect(received).toEqual([{ value: 1 }, { value: 2 }]);
+    expect(received).toEqual([{ value: 2 }]);
     unsubscribe();
     wssAdapter.configure({ timeout: 1000, errors: { language: 'en', codes: [] }, services: {} });
     expect(Object.keys(wssAdapter.services)).toHaveLength(0);

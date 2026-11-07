@@ -68,7 +68,8 @@ export interface IWssAdapter {
   configure: (configuration: IConfiguration) => void;
   subscribeTo: <TEvent = unknown>(
     event: string,
-    observer: IStreamingSubscriptionObserver<TEvent>
+    observer: IStreamingSubscriptionObserver<TEvent>,
+    service?: ServiceName
   ) => IStreamingUnsubscribe;
   __store: IStore;
 }

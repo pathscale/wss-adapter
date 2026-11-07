@@ -92,10 +92,11 @@ outcome unknown: the server may already have performed the action. Late replies 
 an already rejected promise. Reconcile the outcome or use server-supported idempotency before
 retrying an action that must not run twice.
 
-Legacy configured stream callbacks run only for the service receiving the event. Facade stream
-subscriptions remain an event bus across services (by method code or configured method name).
-One service closing does not complete subscriptions that may still receive another service's
-events; unsubscribe explicitly when finished.
+Legacy configured stream callbacks and facade stream subscriptions run only for their service.
+`subscribeTo(event, observer)` subscribes to `app`; pass a third service argument, for example
+`subscribeTo(event, observer, 'trading')`, for another configured service. Services may reuse
+method codes and names without sharing events. Reconfiguration clears facade subscriptions;
+register them again afterwards. Unsubscribe explicitly when finished.
 
 ## Configuration Types
 
